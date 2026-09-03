@@ -2,8 +2,12 @@ import torch
 import torchaudio
 from speechbrain.inference.speaker import EncoderClassifier
 
+from .device import get_device
 
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+DEVICE = get_device()
+# speechbrain's EncoderClassifier only supports "cpu"/"cuda" device strings,
+# so keep it off MPS even when the rest of the pipeline runs there.
+ENCODER_DEVICE = get_device(allow_mps=False)
 
 def load_audio_16khz_mono(file_path):
     """Loads an audio file and resamples to 16kHz mono.
@@ -41,7 +45,7 @@ class SpeakerID(torch.nn.Module):
         """
         
         classifier = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb", 
-        run_opts={'device': DEVICE}
+        run_opts={'device': ENCODER_DEVICE}
         )
         classifier.eval()
         for p in classifier.parameters():
@@ -74,7 +78,7 @@ class SpeakerID(torch.nn.Module):
             print(f"Loaded: {audio_path} | Duration: {wav.shape[-1]/16000:.2f}s")
         # The encode_batch method expects a batch, so we expand dimensions
         embedding = self.embed_wav(wav)
-        embedding = embedding.to(DEVICE)
+        embedding = embedding.to(ENCODER_DEVICE)
         return embedding
 
     def speaker_similarity_loss(self, generated_wav):

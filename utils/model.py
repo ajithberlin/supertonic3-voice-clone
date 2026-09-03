@@ -9,8 +9,9 @@ from onnx2torch import convert
 import httpx
 
 from .loss import SpeakerID
+from .device import get_device
 
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+DEVICE = get_device()
 
 # SSL certificate workaround
 os.environ.pop('SSL_CERT_FILE', None)

@@ -22,9 +22,10 @@ import torch
 
 from helper import load_text_to_speech, load_voice_style as load_voice_styles
 from utils import save_style, SupertonicModel, get_train_dataloader
+from utils.device import get_device
 from configs import texts
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device(get_device())
 
 
 def build_parser():

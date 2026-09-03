@@ -1,8 +1,9 @@
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 
+from .device import get_device
 
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+DEVICE = get_device()
 
 
 def get_train_dataloader(tts, texts, batch_size=1):

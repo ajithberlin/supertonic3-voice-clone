@@ -9,3 +9,7 @@ supertonic3
 
 # vs code
 .vscode/
+.venv/
+logs/
+voices/
+._*
