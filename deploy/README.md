@@ -85,6 +85,14 @@ docker run -d --name supertonic --gpus all \
 | `PRELOAD_ENGINE` | `true` | Warm the ONNX sessions at boot instead of on first request. |
 | `CORS_ORIGINS` | `*` | Comma-separated allowed origins. |
 
+## Licensing of the image
+
+The repository's code is MIT. A baked image (`BAKE_MODEL=true`, the default on `main`)
+also ships Supertone's weights under **Open RAIL-M**, whose use restrictions travel with
+the image — the `io.supertonic.bundled-model-license` label records this. If you would
+rather not redistribute the weights, build with `--no-bake-model` and let the entrypoint
+fetch them on first boot instead.
+
 ## First requests
 
 ```bash

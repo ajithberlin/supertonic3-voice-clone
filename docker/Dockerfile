@@ -74,10 +74,14 @@ RUN mkdir -p /opt/supertonic3 && \
 # ------------------------------------------------------------------------- runtime
 FROM deps AS runtime
 
+# The repository's own code is MIT. When BAKE_MODEL=true the image also carries
+# Supertone's weights, which are Open RAIL-M and carry use restrictions that the
+# single SPDX field above cannot express -- hence the second label.
 LABEL org.opencontainers.image.title="supertonic3-voice-clone batch server" \
       org.opencontainers.image.description="Batch voice-style training and TTS over HTTP, CUDA-accelerated." \
       org.opencontainers.image.source="https://github.com/ajithberlin/supertonic3-voice-clone" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.licenses="MIT" \
+      io.supertonic.bundled-model-license="Supertone/supertonic-3: Open RAIL-M (use restrictions apply)"
 
 ENV MODEL_DIR=/opt/supertonic3 \
     DATA_DIR=/data \
