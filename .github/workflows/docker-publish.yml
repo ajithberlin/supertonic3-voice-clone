@@ -9,6 +9,12 @@ on:
       - "postman/**"
       - "samples/**"
       - "assets/**"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "samples/**"
+      - "assets/**"
   workflow_dispatch:
     inputs:
       inference_only:
@@ -64,6 +70,9 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             training=${{ inputs.inference_only == true && 'false' || 'true' }}
             bake=${{ inputs.bake_model == true && 'true' || 'false' }}
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            training=true
+            bake=false
           else
             training=true
             bake=true
@@ -77,6 +86,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -90,6 +100,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -98,12 +109,12 @@ jobs:
           flavor: |
             suffix=${{ steps.opts.outputs.suffix }},onlatest=true
 
-      - name: Build and push
+      - name: Build${{ github.event_name != 'pull_request' && ' and push' || ' (validation only)' }}
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -117,6 +128,15 @@ jobs:
 
       - name: Summarize
         run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            {
+              echo "### Image builds cleanly"
+              echo
+              echo "Built from \`docker/Dockerfile\` without pushing. Weights are not baked"
+              echo "on pull requests; the publish on \`main\` bakes them in."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           {
             echo "### Image published"
             echo

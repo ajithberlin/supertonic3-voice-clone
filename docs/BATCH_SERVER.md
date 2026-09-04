@@ -158,6 +158,13 @@ Every knob is an environment variable; the full table is in
 set `baseUrl` and `apiKey`, and the requests chain themselves: submitting a job saves
 `jobId`, submitting a batch saves `batchId`, uploading a voice saves `voiceId`.
 
+## CI
+
+[`.github/workflows/docker-publish.yml`](../.github/workflows/docker-publish.yml) runs
+the test suite and builds the image on every pull request — without pushing, and
+without baking the weights, so the check stays quick. Pushes to `main` and `v*` tags
+build the full image and publish it to GHCR.
+
 ## Notes and limits
 
 - The server runs as a **single process**. The queues and the warm ONNX sessions live
