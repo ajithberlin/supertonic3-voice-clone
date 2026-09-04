@@ -1,0 +1,858 @@
+{
+  "info": {
+    "_postman_id": "8f2b6c14-5f3f-4f2a-9a7c-supertonic0001",
+    "name": "Supertonic Voice Clone \u2014 Batch API",
+    "description": "Batch voice-style training and speech synthesis for supertonic3-voice-clone.\n\n**Setup**\n1. Import `postman/supertonic-batch.postman_environment.json` and select it.\n2. Set `baseUrl` to your server (e.g. `https://<POD_ID>-8000.proxy.runpod.net`).\n3. Set `apiKey` if the server was started with `API_KEY`; leave blank otherwise.\n\n**Flow**\nRequests chain automatically: submitting a job saves `jobId`, submitting a batch saves `batchId`, uploading a voice saves `voiceId`, and a finished training job saves `styleId`. Run *Jobs \u2192 Get job* repeatedly (or use the Collection Runner) until `status` is `succeeded`, then *Jobs \u2192 Download result*.\n\nJobs run in parallel: the server has a pool of synthesis workers and a separate pool of training workers, so a long training run never blocks synthesis.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{apiKey}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Skip the auth header entirely when no API key is configured,",
+          "// so the collection works against an unauthenticated dev server.",
+          "if (!pm.environment.get('apiKey') && !pm.collectionVariables.get('apiKey')) {",
+          "    pm.request.headers.remove('X-API-Key');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "batchId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "voiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "styleId",
+      "value": "F4",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "System",
+      "description": "Liveness, capacity and capability checks.",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Unauthenticated liveness probe. `model_ready` is false until the Supertone weights are on disk."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));",
+                  "pm.test('reports ok', () => pm.response.json().status === 'ok');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "System status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/system",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "system"
+              ]
+            },
+            "description": "Execution providers, detected GPU, worker counts, live queue depth and job totals by status. The first thing to check when jobs seem slow."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));",
+                  "const b = pm.response.json();",
+                  "console.log('providers:', b.providers.join(', '));",
+                  "console.log('queue depth:', JSON.stringify(b.queue_depth));",
+                  "pm.test('engine has a provider', () => pm.expect(b.providers).to.not.be.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Supported languages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/languages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "languages"
+              ]
+            },
+            "description": "Language codes accepted by the `lang` field."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Voices",
+      "description": "Reference audio for style training.",
+      "item": [
+        {
+          "name": "Upload voice",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/voices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "voices"
+              ]
+            },
+            "description": "Upload the reference recording, then pass the returned `id` as `voice` when submitting a training job.\n\n**Pick a file in the Body tab before sending.**",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Target speaker audio. WAV recommended; 30-120s of clean speech."
+                },
+                {
+                  "key": "name",
+                  "value": "my-voice",
+                  "type": "text",
+                  "description": "Optional voice id; defaults to the filename stem."
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));",
+                  "if (pm.response.code === 201) {",
+                  "    const b = pm.response.json();",
+                  "    pm.environment.set('voiceId', b.id);",
+                  "    console.log('voiceId =', b.id, '|', b.duration_seconds, 'sec');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List voices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/voices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "voices"
+              ]
+            },
+            "description": "Every uploaded reference recording, with duration and sample rate."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete voice",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/voices/{{voiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "voices",
+                "{{voiceId}}"
+              ]
+            },
+            "description": "Removes the uploaded audio. Styles already trained from it are kept."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Styles",
+      "description": "Voice styles: the built-ins shipped with the model plus anything you trained.",
+      "item": [
+        {
+          "name": "List styles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/styles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "styles"
+              ]
+            },
+            "description": "`source` is `builtin` for the model's own styles and `trained` for yours. Use the `id` as the `style` field on a generate job."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));",
+                  "const styles = pm.response.json();",
+                  "console.log('styles:', styles.map(s => `${s.id} (${s.source})`).join(', '));",
+                  "if (styles.length) pm.environment.set('styleId', styles[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download style JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/styles/{{styleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "styles",
+                "{{styleId}}"
+              ]
+            },
+            "description": "The raw style vectors, in the same format `train_style.py` writes. Save it to reuse the voice elsewhere."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete style",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/styles/{{styleId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "styles",
+                "{{styleId}}"
+              ]
+            },
+            "description": "Deletes a trained style. Built-in styles cannot be deleted (404)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "description": "Submit work, watch it, fetch the artifact.",
+      "item": [
+        {
+          "name": "Submit generate job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/generate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "generate"
+              ]
+            },
+            "description": "Queue one synthesis. Returns 202 immediately with a job id \u2014 nothing blocks on the GPU.\n\n`style` accepts a built-in name (`F4`), a trained style id, or a path inside the server's data directory. Long text is chunked automatically and `progress` tracks the chunks.\n\nAdd `webhook_url` to be POSTed the job summary when it finishes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The batch server is running. This line was synthesized from a queued job.\",\n  \"style\": \"{{styleId}}\",\n  \"lang\": \"en\",\n  \"total_step\": 6,\n  \"speed\": 1.05,\n  \"silence_duration\": 0.3,\n  \"output_format\": \"wav\",\n  \"name\": \"demo-line\",\n  \"priority\": 0,\n  \"metadata\": {\n    \"source\": \"postman\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));",
+                  "const job = pm.response.json().job;",
+                  "pm.environment.set('jobId', job.id);",
+                  "console.log('jobId =', job.id, '| status =', job.status);",
+                  "pm.test('job was queued', () => pm.expect(job.status).to.equal('queued'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit training job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/train",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "train"
+              ]
+            },
+            "description": "Train a voice style from an uploaded recording. Runs 6-30 minutes on a 3090/4090 depending on `num_steps` and how quickly the loss converges.\n\n`reference_style`: `auto` scores every built-in style and seeds from the closest, `none` starts from random, or pass a style id to seed from it.\n\nOn success the style is published under `result.style_id` and is immediately usable as the `style` field of a generate job.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"my-voice\",\n  \"voice\": \"{{voiceId}}\",\n  \"gender\": \"F\",\n  \"reference_style\": \"auto\",\n  \"num_steps\": 3000,\n  \"learning_rate\": 0.0002,\n  \"seed\": 49,\n  \"speed\": 1.05,\n  \"vocoder_steps\": 6,\n  \"save_steps\": 500,\n  \"early_stop_loss_threshold\": 0.015,\n  \"priority\": 0,\n  \"metadata\": {\n    \"source\": \"postman\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));",
+                  "const job = pm.response.json().job;",
+                  "pm.environment.set('jobId', job.id);",
+                  "console.log('jobId =', job.id, '| status =', job.status);",
+                  "pm.test('job was queued', () => pm.expect(job.status).to.equal('queued'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/{{jobId}}?include_log=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "{{jobId}}"
+              ],
+              "query": [
+                {
+                  "key": "include_log",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Status, progress, timings, result and the tail of the job log.\n\n`status` is one of `queued`, `running`, `succeeded`, `failed`, `canceled`. Poll this until it reaches a terminal state."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));",
+                  "const b = pm.response.json();",
+                  "console.log(`${b.id}: ${b.status} ${Math.round((b.progress || 0) * 100)}%`,",
+                  "            b.progress_message || '');",
+                  "if (b.status === 'failed') console.error('error:', b.error);",
+                  "if (b.status === 'succeeded') console.log('result:', JSON.stringify(b.result));",
+                  "pm.test('job is not failed', () => pm.expect(b.status).to.not.equal('failed'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs?limit=50&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "running",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "generate",
+                  "disabled": true
+                },
+                {
+                  "key": "batch_id",
+                  "value": "{{batchId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Newest first. `status` may be repeated to match several at once (`?status=queued&status=running` is the live queue)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));",
+                  "const b = pm.response.json();",
+                  "console.log(`${b.jobs.length} of ${b.total} jobs`);",
+                  "b.jobs.forEach(j => console.log(` ${j.id} ${j.type} ${j.status}`));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get job logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/{{jobId}}/logs?lines=200",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "{{jobId}}",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "lines",
+                  "value": "200"
+                }
+              ]
+            },
+            "description": "Plain-text worker log. For training jobs this is the full `train_style.py` output, including per-step loss."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download result",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/{{jobId}}/result",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "{{jobId}}",
+                "result"
+              ]
+            },
+            "description": "The artifact: a WAV for generate jobs, the style JSON for training jobs. 409 while the job is still running, 410 if the file was cleaned up.\n\nUse **Send and Download** in Postman to save it."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));",
+                  "if (pm.response.code === 409) console.log('job has not finished yet');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel job",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/{{jobId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "{{jobId}}",
+                "cancel"
+              ]
+            },
+            "description": "Cancels a queued job outright; a running one is stopped at the next checkpoint (training subprocesses are signalled). 409 if it already finished."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete job",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "{{jobId}}"
+              ]
+            },
+            "description": "Removes the job record along with its outputs and log. Cancel it first if it is still queued or running."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Batches",
+      "description": "Submit many jobs at once and track them as a unit.",
+      "item": [
+        {
+          "name": "Submit batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/batches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "batches"
+              ]
+            },
+            "description": "Queue up to `MAX_BATCH_ITEMS` (default 512) jobs in one call. Generate items fan out across the synthesis workers; train items go to the training pool. `priority` runs an item ahead of the rest.\n\nValidation is all-or-nothing: if any item names a style that does not exist, the whole batch is rejected and nothing is queued.\n\nMix job types freely \u2014 an item is `{\"type\": \"train\", \"train\": {...}}` for training.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metadata\": {\n    \"run\": \"chapter-1\"\n  },\n  \"items\": [\n    {\n      \"type\": \"generate\",\n      \"priority\": 10,\n      \"generate\": {\n        \"text\": \"First line of the batch.\",\n        \"style\": \"{{styleId}}\",\n        \"lang\": \"en\",\n        \"name\": \"line-01\"\n      }\n    },\n    {\n      \"type\": \"generate\",\n      \"generate\": {\n        \"text\": \"Second line, synthesized in parallel with the first.\",\n        \"style\": \"{{styleId}}\",\n        \"lang\": \"en\",\n        \"name\": \"line-02\"\n      }\n    },\n    {\n      \"type\": \"generate\",\n      \"generate\": {\n        \"text\": \"Third line. Add as many as you need.\",\n        \"style\": \"{{styleId}}\",\n        \"lang\": \"en\",\n        \"name\": \"line-03\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));",
+                  "const b = pm.response.json();",
+                  "pm.environment.set('batchId', b.batch_id);",
+                  "if (b.jobs.length) pm.environment.set('jobId', b.jobs[0].id);",
+                  "console.log('batchId =', b.batch_id, '| accepted', b.accepted, 'jobs');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get batch status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/batches/{{batchId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "batches",
+                "{{batchId}}"
+              ]
+            },
+            "description": "Aggregate view: per-status counts, mean progress across the batch, and every job. `status` is `queued`, `running`, `succeeded`, `completed_with_failures` or `canceled`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));",
+                  "const b = pm.response.json();",
+                  "console.log(`batch ${b.status} \u2014 ${Math.round(b.progress * 100)}%`,",
+                  "            JSON.stringify(b.counts));",
+                  "b.jobs.filter(j => j.status === 'failed')",
+                  "      .forEach(j => console.error('failed:', j.id, j.error));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel batch",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/batches/{{batchId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "batches",
+                "{{batchId}}",
+                "cancel"
+              ]
+            },
+            "description": "Cancels every queued and running job in the batch. Finished jobs keep their results."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ok', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 204]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -37,6 +37,63 @@ Important arguments:
 - `--reference-style`: use `auto` to pick the closest built-in style, `none` for random initialization, or a path to a specific `style checkpoint` JSON file.
 - `--seed`, `--speed`, `--num-steps`, `--learning-rate`, `--vocoder-steps`: core training knobs that affect stability and convergence.
 
+## 🚀 Batch Server & Container
+
+Run training and synthesis as queued jobs over HTTP — many in parallel, with status
+polling, cancellation and artifact downloads. Full reference:
+[docs/BATCH_SERVER.md](docs/BATCH_SERVER.md).
+
+```bash
+pip install -r requirements_server.txt
+python -m server                      # http://localhost:8000, interactive docs at /docs
+```
+
+```bash
+# queue a synthesis, then poll it
+curl -s -X POST localhost:8000/v1/jobs/generate -H 'Content-Type: application/json' \
+  -d '{"text":"Hello from the batch server.","style":"F4"}'
+curl -s localhost:8000/v1/jobs/<job-id>
+curl -s localhost:8000/v1/jobs/<job-id>/result -o hello.wav
+
+# or a whole file of lines at once
+python scripts/batch_client.py --input lines.txt --style F4 --out ./audio
+```
+
+Synthesis workers share one warm set of ONNX sessions and run concurrently; training
+runs in its own subprocess pool, so a long training job never blocks synthesis. The job
+queue is persisted to SQLite, so a restarted container resumes rather than loses work.
+
+### Container
+
+A CUDA image is published to GHCR by
+[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml), or build
+and push it yourself:
+
+```bash
+export GHCR_TOKEN=<PAT with write:packages>
+./docker/build_and_push.sh --push
+```
+
+The default `cu128` build covers RTX 3090, 4090 and **5090** (Blackwell needs cu128) as
+well as A100/L40S. Run it on RunPod or Vast.ai:
+
+```bash
+docker run -d --gpus all -p 8000:8000 \
+  -e API_KEY="$(openssl rand -hex 24)" \
+  -v /workspace/supertonic:/data \
+  ghcr.io/<owner>/<repo>:latest
+```
+
+See [deploy/README.md](deploy/README.md) for the RunPod template, the Vast.ai launch
+script, GPU sizing and the full environment-variable table.
+
+### Postman
+
+Import `postman/supertonic-batch.postman_collection.json` together with
+`postman/supertonic-batch.postman_environment.json`, set `baseUrl` and `apiKey`, and
+every endpoint is ready to send — the requests chain job, batch, voice and style ids
+between themselves.
+
 ## Limitations
 
 While this approach captures speaker identity, its ability to clone emotional expressiveness is limited. This is because the current loss function prioritizes identity over prosody. Furthermore, the original speaker encoder was not released by the developers.

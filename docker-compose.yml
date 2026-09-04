@@ -1,0 +1,36 @@
+# Local / single-host run. Requires the NVIDIA container toolkit.
+#
+#   docker compose up --build          build from source
+#   IMAGE=ghcr.io/<owner>/<repo>:latest docker compose up
+services:
+  supertonic-batch:
+    image: ${IMAGE:-supertonic-batch:local}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        TORCH_CHANNEL: ${TORCH_CHANNEL:-cu128}
+        INSTALL_TRAINING: ${INSTALL_TRAINING:-true}
+        BAKE_MODEL: ${BAKE_MODEL:-true}
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      API_KEY: ${API_KEY:-}
+      ORT_PROVIDER: ${ORT_PROVIDER:-auto}
+      GENERATE_CONCURRENCY: ${GENERATE_CONCURRENCY:-4}
+      TRAIN_CONCURRENCY: ${TRAIN_CONCURRENCY:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - supertonic-data:/data
+    shm_size: "2gb"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  supertonic-data:
