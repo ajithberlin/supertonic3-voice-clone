@@ -41,6 +41,8 @@ def build_parser():
     parser.add_argument("--vocoder-steps", type=int, default=6, help="Vocoder steps used during evaluation")
     parser.add_argument("--save-steps", type=int, default=500, help="Checkpoint save interval")
     parser.add_argument("--early-stop-loss-threshold", type=float, default=0.015, help="Loss threshold for early stopping")
+    parser.add_argument("--model-dir", default=os.environ.get("MODEL_DIR", "supertonic3"), help="Directory holding the downloaded Supertone model")
+    parser.add_argument("--output-dir", default=os.environ.get("TRAIN_OUTPUT_DIR", "logs"), help="Directory for checkpoints and the final style JSON")
     return parser
 
 
@@ -63,17 +65,19 @@ def main():
     seed = args.seed
     speed = args.speed
     vocoder_steps = args.vocoder_steps
-    
+    model_dir = args.model_dir
+    onnx_dir = os.path.join(model_dir, "onnx")
+    voice_styles_dir = os.path.join(model_dir, "voice_styles")
 
     # models
-    model = SupertonicModel("supertonic3/onnx", target_wav_path)
-    TTS = load_text_to_speech("supertonic3/onnx")
+    model = SupertonicModel(onnx_dir, target_wav_path)
+    TTS = load_text_to_speech(onnx_dir)
 
     print(f"Using device: {DEVICE}")
     print(f"Name: {name}")
     
     # Paths
-    log_dir = f"logs/{name}"
+    log_dir = os.path.join(args.output_dir, name)
     os.makedirs(log_dir, exist_ok=True)
     
     # ===== Generate fixed noisy latent (seed-controlled) =====
@@ -88,7 +92,7 @@ def main():
     tmp_input_ids, tmp_attention_mask = next(data_iter)
     # voice style
     tmp_voice = "F4.json" if gender == "F" else "M1.json"
-    tmp_voice_path = f"supertonic3/voice_styles/{tmp_voice}"
+    tmp_voice_path = os.path.join(voice_styles_dir, tmp_voice)
     tmp_ttl, tmp_dp = load_voice_style(tmp_voice_path) # (1, 50, 256), (1, 8, 16)
     
     
@@ -112,7 +116,7 @@ def main():
     elif reference_style == "auto":
         print("\nFinding closest style to target WAV...")
 
-        all_style_paths = sorted(glob.glob("supertonic3/voice_styles/[FM]*.json"))
+        all_style_paths = sorted(glob.glob(os.path.join(voice_styles_dir, "[FM]*.json")))
         best_loss = float('inf') # 1 - similarity
         best_path = None
 
@@ -199,7 +203,7 @@ def main():
 
         # Save checkpoint
         if (step + 1) % save_steps == 0:
-            ckpt_path = f"{log_dir}/{name}_{step+1:04d}.json"
+            ckpt_path = os.path.join(log_dir, f"{name}_{step+1:04d}.json")
             save_style(ckpt_path, best_ttl, best_dp, target_wav_path)
             print(f"  >> Checkpoint saved: {ckpt_path}")
 
@@ -209,7 +213,7 @@ def main():
             break
 
     # ===== Save final result =====
-    final_path = f"{log_dir}/{name}.json"
+    final_path = os.path.join(log_dir, f"{name}.json")
     print(f"\nSaving best style to: {final_path}")
     save_style(final_path, best_ttl, best_dp, target_wav_path)
     elapsed = time.time() - start_time

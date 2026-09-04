@@ -4,10 +4,11 @@ import time
 import soundfile as sf
 from helper import load_text_to_speech, timer, load_voice_style
 
-save_dir = "samples"
+save_dir = os.environ.get("SAMPLES_DIR", "samples")
 os.makedirs(save_dir, exist_ok=True)
 
-tts = load_text_to_speech('supertonic3/onnx')
+model_dir = os.environ.get("MODEL_DIR", "supertonic3")
+tts = load_text_to_speech(os.path.join(model_dir, "onnx"))
 
 def argparse_args():
     parser = argparse.ArgumentParser(description="Generate speech from text using trained voice style.")

@@ -13,3 +13,10 @@ supertonic3
 logs/
 voices/
 ._*
+
+# batch server runtime state
+data/
+batch_output/
+*.db
+*.db-wal
+*.db-shm
