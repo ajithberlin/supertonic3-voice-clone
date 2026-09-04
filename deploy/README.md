@@ -4,12 +4,20 @@ The image is a single self-contained service: HTTP API, job queue, worker pools 
 (optionally) the Supertone weights. It needs one NVIDIA GPU and one volume.
 
 ```
-ghcr.io/<owner>/<repo>:latest             # full image: synthesis + style training
-ghcr.io/<owner>/<repo>:latest-inference   # slim image: synthesis only, no torch
+ghcr.io/ajithberlin/supertonic3-voice-clone:latest        # synthesis + style training
+ghcr.io/ajithberlin/supertonic3-voice-clone:main
+ghcr.io/ajithberlin/supertonic3-voice-clone:sha-<commit>  # pin a specific build
 ```
 
-GHCR packages start out **private**. Either flip the package to public in its GitHub
-package settings, or log in on the GPU host first:
+Those are the tags a push to `main` publishes. The slim inference-only variant
+(`-inference` suffix, no torch, no style training) is **not** built automatically —
+produce one by running the *Publish container to GHCR* workflow manually with
+`inference_only: true`, or locally with `./docker/build_and_push.sh --push
+--inference-only`.
+
+Published from a public repository, so the package inherits that visibility and pulls
+anonymously — no `docker login` on the GPU host. If you fork into a private repo, or
+set the package to private yourself, authenticate first with a `read:packages` token:
 
 ```bash
 echo "$GHCR_TOKEN" | docker login ghcr.io -u <owner> --password-stdin
@@ -32,7 +40,7 @@ of generate workers.
 
 **Pods → Deploy → Custom container.**
 
-- Container image: `ghcr.io/<owner>/<repo>:latest`
+- Container image: `ghcr.io/ajithberlin/supertonic3-voice-clone:latest`
 - Container disk: 30 GB (the image with baked weights is ~12 GB)
 - Volume: 20 GB mounted at `/data`
 - Expose HTTP port: `8000`
@@ -48,7 +56,7 @@ RunPod puts the pod behind `https://<POD_ID>-8000.proxy.runpod.net`, which is pu
 
 Search for an offer, then use the "Docker image" launch mode:
 
-- Image: `ghcr.io/<owner>/<repo>:latest`
+- Image: `ghcr.io/ajithberlin/supertonic3-voice-clone:latest`
 - Docker options: `-p 8000:8000 -e API_KEY=... -v /workspace/supertonic:/data`
 - On-start script: leave empty; the entrypoint handles everything.
 
@@ -62,7 +70,7 @@ docker run -d --name supertonic --gpus all \
   -e TRAIN_CONCURRENCY=1 \
   -v /workspace/supertonic:/data \
   --restart unless-stopped \
-  ghcr.io/<owner>/<repo>:latest
+  ghcr.io/ajithberlin/supertonic3-voice-clone:latest
 ```
 
 `deploy/vast-launch.sh` wraps that with sanity checks.
