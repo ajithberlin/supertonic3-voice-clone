@@ -45,7 +45,7 @@ class Settings:
     generate_concurrency: int = field(
         default_factory=lambda: _env_int("GENERATE_CONCURRENCY", _default_generate_concurrency())
     )
-    train_concurrency: int = field(default_factory=lambda: _env_int("TRAIN_CONCURRENCY", 1))
+    train_concurrency: int = field(default_factory=lambda: _env_int("TRAIN_CONCURRENCY", 2))
     start_workers: bool = field(default_factory=lambda: _env_bool("START_WORKERS", True))
     preload_engine: bool = field(default_factory=lambda: _env_bool("PRELOAD_ENGINE", True))
 
