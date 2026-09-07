@@ -38,23 +38,28 @@ WORKDIR /app
 COPY requirements.txt requirements_infer.txt requirements_server.txt ./
 
 # Inference stack: ONNX Runtime with the CUDA provider, plus the API server.
-RUN pip install -r requirements_infer.txt -r requirements_server.txt \
-    && pip uninstall -y onnxruntime \
+# Filter out CPU onnxruntime so it does not conflict with onnxruntime-gpu.
+RUN grep -v '^onnxruntime' requirements_infer.txt > requirements_infer_gpu.txt \
+    && pip install -r requirements_server.txt -r requirements_infer_gpu.txt \
     && pip install "onnxruntime-gpu>=1.20,<2"
 
 # Training stack (torch + speechbrain). Skip with --build-arg INSTALL_TRAINING=false
 # for an inference-only image that is roughly 4 GB smaller.
 RUN if [ "${INSTALL_TRAINING}" = "true" ]; then \
-        pip install --index-url "https://download.pytorch.org/whl/${TORCH_CHANNEL}" \
+        grep -v '^onnxruntime' requirements.txt > requirements_train_gpu.txt \
+        && pip install --index-url "https://download.pytorch.org/whl/${TORCH_CHANNEL}" \
                     --extra-index-url https://pypi.org/simple \
-                    -r requirements.txt \
-        && pip uninstall -y onnxruntime \
-        && pip install "onnxruntime-gpu>=1.20,<2" ; \
+                    -r requirements_train_gpu.txt \
+        && pip uninstall -y onnxruntime 2>/dev/null || true \
+        && pip install --force-reinstall --no-deps "onnxruntime-gpu>=1.20,<2" ; \
     else \
         echo "skipping training dependencies (INSTALL_TRAINING=${INSTALL_TRAINING})" ; \
     fi
 
 RUN pip install "huggingface_hub[cli]>=0.25"
+
+# Build verification: ensure ONNX Runtime GPU is intact and exposes get_available_providers
+RUN python -c "import onnxruntime as ort; assert hasattr(ort, 'get_available_providers'), 'onnxruntime missing get_available_providers'; print('Available ONNX providers in build:', ort.get_available_providers())"
 
 # -------------------------------------------------------------------------- model
 # Split out so a code-only change does not re-download ~1 GB of weights.

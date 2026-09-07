@@ -6,6 +6,7 @@ generate workers concurrently — which is what makes many parallel jobs cheap.
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
@@ -13,6 +14,8 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from .config import Settings
+
+log = logging.getLogger("supertonic.engine")
 
 _ENGINE_LOCK = threading.Lock()
 _ENGINE: Optional["Engine"] = None
@@ -23,7 +26,19 @@ def available_providers() -> list[str]:
         import onnxruntime as ort
     except ImportError:
         return []
-    return list(ort.get_available_providers())
+
+    try:
+        if hasattr(ort, "get_available_providers"):
+            return list(ort.get_available_providers())
+        log.warning(
+            "onnxruntime was imported but lacks 'get_available_providers'. "
+            "This usually indicates a corrupted installation (e.g. conflicting "
+            "'onnxruntime' and 'onnxruntime-gpu' packages). "
+            "Fix with: pip uninstall -y onnxruntime onnxruntime-gpu && pip install onnxruntime-gpu"
+        )
+    except Exception as exc:
+        log.warning("Failed to determine ONNX Runtime available providers: %s", exc)
+    return []
 
 
 def resolve_providers(preference: str) -> list[str]:
@@ -126,6 +141,13 @@ class Engine:
                     "Run ./setup_infer.sh (or set MODEL_DIR) before serving requests."
                 )
             import onnxruntime as ort
+
+            if not hasattr(ort, "SessionOptions"):
+                raise RuntimeError(
+                    "The installed 'onnxruntime' module is corrupted (missing SessionOptions). "
+                    "This typically occurs if CPU onnxruntime and onnxruntime-gpu were both installed. "
+                    "Fix with: pip uninstall -y onnxruntime onnxruntime-gpu && pip install onnxruntime-gpu"
+                )
 
             from helper import (
                 TextToSpeech,
