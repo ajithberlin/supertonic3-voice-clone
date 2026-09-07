@@ -2,12 +2,13 @@
 #
 # Launch the batch server on a freshly rented Vast.ai / RunPod box.
 #
-#   curl -fsSL <raw-url>/deploy/vast-launch.sh | bash -s -- ghcr.io/<owner>/<repo>:latest
+#   curl -fsSL <raw-url>/deploy/vast-launch.sh | bash -s -- \
+#       ghcr.io/ajithberlin/supertonic3-voice-clone:latest
 set -euo pipefail
 
 IMAGE="${1:-${IMAGE:-}}"
 if [[ -z "${IMAGE}" ]]; then
-    echo "usage: $0 ghcr.io/<owner>/<repo>:latest" >&2
+    echo "usage: $0 ghcr.io/ajithberlin/supertonic3-voice-clone:latest" >&2
     exit 2
 fi
 

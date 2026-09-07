@@ -1,6 +1,6 @@
 {
   "name": "supertonic3-voice-clone batch server",
-  "imageName": "ghcr.io/OWNER/REPO:latest",
+  "imageName": "ghcr.io/ajithberlin/supertonic3-voice-clone:latest",
   "containerDiskInGb": 30,
   "volumeInGb": 20,
   "volumeMountPath": "/data",
@@ -8,14 +8,38 @@
   "isServerless": false,
   "readme": "Batch voice-style training + TTS over HTTP. Open the pod's 8000/http proxy URL and hit /docs for the interactive API. Set API_KEY before exposing the pod.",
   "env": [
-    { "key": "API_KEY", "value": "CHANGE-ME" },
-    { "key": "DATA_DIR", "value": "/data" },
-    { "key": "MODEL_DIR", "value": "/opt/supertonic3" },
-    { "key": "GENERATE_CONCURRENCY", "value": "4" },
-    { "key": "TRAIN_CONCURRENCY", "value": "1" },
-    { "key": "ORT_PROVIDER", "value": "auto" },
-    { "key": "PRELOAD_ENGINE", "value": "true" },
-    { "key": "LOG_LEVEL", "value": "info" }
+    {
+      "key": "API_KEY",
+      "value": "CHANGE-ME"
+    },
+    {
+      "key": "DATA_DIR",
+      "value": "/data"
+    },
+    {
+      "key": "MODEL_DIR",
+      "value": "/opt/supertonic3"
+    },
+    {
+      "key": "GENERATE_CONCURRENCY",
+      "value": "4"
+    },
+    {
+      "key": "TRAIN_CONCURRENCY",
+      "value": "1"
+    },
+    {
+      "key": "ORT_PROVIDER",
+      "value": "auto"
+    },
+    {
+      "key": "PRELOAD_ENGINE",
+      "value": "true"
+    },
+    {
+      "key": "LOG_LEVEL",
+      "value": "info"
+    }
   ],
   "recommendedGpuTypes": [
     "NVIDIA GeForce RTX 3090",

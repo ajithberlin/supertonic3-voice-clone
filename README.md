@@ -81,7 +81,7 @@ well as A100/L40S. Run it on RunPod or Vast.ai:
 docker run -d --gpus all -p 8000:8000 \
   -e API_KEY="$(openssl rand -hex 24)" \
   -v /workspace/supertonic:/data \
-  ghcr.io/<owner>/<repo>:latest
+  ghcr.io/ajithberlin/supertonic3-voice-clone:latest
 ```
 
 See [deploy/README.md](deploy/README.md) for the RunPod template, the Vast.ai launch
